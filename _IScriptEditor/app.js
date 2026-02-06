@@ -1,5 +1,8 @@
+"use strict";
 
 const filenameHeader = document.getElementById('filename-display');
+
+// #region Buttons
 // Reference to buttons
 const openBtn = document.getElementById('open-button');
 const saveBtn = document.getElementById('save-button');
@@ -7,9 +10,12 @@ const toggleJpBtn = document.getElementById('toggle-jp-button');
 const toggleCodeBtn = document.getElementById('toggle-code-button');
 const specialCharactersBtn = document.getElementById('special-characters-button');
 const aboutBtn = document.getElementById('about-button');
-const day_selector = document.getElementById('day-selector');
-const chapter_selector = document.getElementById('chapter-selector');
+const daySelector = document.getElementById('day-selector');
+const chapterSelector = document.getElementById('chapter-selector');
 const loadBtn = document.getElementById('load-button');
+const ownerSelector = document.getElementById('github-owner-selector');
+const branchSelector = document.getElementById('github-branch-selector');
+
 // Event listeners for buttons
 openBtn.addEventListener('click', readFile);
 saveBtn.addEventListener('click', saveFile);
@@ -17,87 +23,390 @@ toggleJpBtn.addEventListener('click', toggleJp);
 toggleCodeBtn.addEventListener('click', toggleCode);
 specialCharactersBtn.addEventListener('click', showSpecialCharacters);
 aboutBtn.addEventListener('click', showAbout);
-day_selector.addEventListener('change', loadDay);
+daySelector.addEventListener('change', loadDay);
 loadBtn.addEventListener('click', loadChapter);
+// ownerSelector and branchSelector listeners initialise later
+// #endregion
 
+// #region Globals
 // Variables to hold file data
-var enFilename = '';
-var jpFilename = '';
-var jpText = [];
-var engCodeFile = '';
-var hideCode = true;
-var hideJp = true;
+let enFilename = '';
+let jpFilename = '';
+let jpText = [];
+let engCodeFile = '';
+let hideCode = true;
+let hideJp = true;
 
 // Variables for tracking speaker
-var speaker_left = "NONE";
-var speaker_right = "NONE";
-var speaker_left_on = false;
-var speaker_right_on = false;
+let speaker_left = "NONE";
+let speaker_right = "NONE";
+let speaker_left_on = false;
+let speaker_right_on = false;
+
 // Variables for tracking player gendered dialogue
 const MALE = "MALE";
 const FEMALE = "FEMALE";
 const BOTH = "BOTH";
-var gender_trigger = "NONE";
-var end_gender_trigger = "NONE";
-var gender = "BOTH";
+let gender_trigger = "NONE";
+let end_gender_trigger = "NONE";
+let gender = "BOTH";
+
 // Variable for tracking partner dialogue
-var partner_changed = false;
-var partner_trigger = "NONE";
-var end_partner_trigger = "NONE";
-var p0_end = "NONE";
-var p1_end = "NONE";
-var p2_end = "NONE";
-var p3_end = "NONE";
-var partner = -1;
+let partner_changed = false;
+let partner_trigger = "NONE";
+let end_partner_trigger = "NONE";
+let p0_end = "NONE";
+let p1_end = "NONE";
+let p2_end = "NONE";
+let p3_end = "NONE";
+let partner = -1;
 
 const TOTAL_SPACE = 216;
+const repo = 'SNSC3-Translation';
 
-var DAYS_LOADED = false;
-var CHAPTERS_LOADED = false;
+let DAYS_LOADED = false;
+let CHAPTERS_LOADED = false;
 
+let DIRTY = false;
+const auth = '';
 
-var DIRTY = false;
+const defaultGithubDetails = {
+    repo,
+    owner: 'CornStarch9272',
+    ref: 'IScript-Development',
+};
 
+const githubDetails = defaultGithubDetails;
+
+const ignoredFolders = [
+    '.github',
+    '_IScriptEditor',
+    'script untranslated',
+    'system_messages'
+]
+// #endregion
+
+// #region Maps
+// Mapping of character IDs to names
+const names = {
+    0:"Player",
+    2:"Partner",
+    106:"???",
+    107:"Murno",
+    108:"V.E",
+    109:"Tier",
+    110:"Lemmy",
+    111:"Jade",
+    112:"Velvoren",
+    113:"Thus",
+    114:"Roche",
+    115:"Unknown",
+    116:"Unknown",
+    117:"V.E Otome Mode",
+    118:"Gatekeeper",
+    119:"Chief",
+    120:"Man",
+    121:"Woman",
+    122:"Elderly",
+    123:"Child",
+    124:"Shop Owner",
+    125:"Shop Clerk",
+    126:"Merchant",
+    127:"Reception",
+    128:"Rob",
+    129:"Wellman",
+    130:"Ianna",
+    131:"Zakk",
+    132:"Jade",
+    133:"Benson",
+    134:"Anise",
+    135:"Tram",
+    136:"Gallahan",
+    137:"Serge",
+    138:"Eliez",
+    141:"Phantom Dragon",
+    142:"Magdrad",
+    143:"Archer Girl",
+    144:"Stray Cat",
+    145:"Catlover",
+    146:"Fisherman",
+    147:"Lumberjack",
+    148:"Peddler",
+    149:"Peddler's Daughter",
+    150:"Wantedman",
+    151:"Jailer",
+    152:"Zenichi",
+    153:"Zenji",
+    154:"Zenzou",
+    155:"Zentatsu"
+};
+
+const TAGS = {
+    "[NAME 0]" : "#PlayerName",
+    "[NAME 1]" : "#PlayerNickname",
+    "[NAME 2]" : "#PartnerName",
+    "[NAME 4]" : "#ItemName",
+    "..." : "…",
+    "   " : "　",
+    "◎" : "#Heart",
+    "∞" : "#Paw",
+    "●" : "#Dot"
+}
+
+const BAD_TAGS = {
+    "ã" : "　",
+    "â¦" : "…",
+    "â" : "#Heart",
+    "Î²" : "#PlayerName",
+    "Î´" : "#PlayerNickname",
+    "Î³" : "#PartnerName",
+}
+
+const TAG_LENGTH = {
+    "#PlayerName": 72,
+    "#PlayerNickname": 72,
+    "#PartnerName": 72,
+    "[NAME 0]": 72,
+    "[NAME 1]": 72,
+    "[NAME 2]": 72,
+    "[NAME 4]" : 72,
+    "◎" : 12,
+    "∞" : 12,
+    "●" : 8
+};
+
+const CHARACTER_SPACE = {
+    "!": 3,
+    "\"": 7,
+    "#": 8,
+    "$": 7,
+    "%": 8,
+    "&": 8,
+    "'": 3,
+    "(": 6,
+    ")": 6,
+    "*": 8,
+    "+": 8,
+    ",": 3,
+    "-": 6,
+    ".": 3,
+    "/": 8,
+    "0": 6,
+    "1": 5,
+    "2": 6,
+    "3": 6,
+    "4": 6,
+    "5": 6,
+    "6": 6,
+    "7": 6,
+    "8": 6,
+    "9": 6,
+    "A": 6,
+    "B": 6,
+    "C": 6,
+    "D": 6,
+    "E": 6,
+    "F": 6,
+    "G": 6,
+    "H": 6,
+    "I": 4,
+    "J": 6,
+    "K": 6,
+    "L": 6,
+    "M": 6,
+    "N": 6,
+    "O": 6,
+    "P": 6,
+    "Q": 7,
+    "R": 6,
+    "S": 6,
+    "T": 6,
+    "U": 6,
+    "V": 6,
+    "W": 6,
+    "X": 6,
+    "Y": 6,
+    "Z": 6,
+    "a": 6,
+    "b": 6,
+    "c": 6,
+    "d": 6,
+    "e": 6,
+    "f": 6,
+    "g": 6,
+    "h": 6,
+    "i": 3,
+    "j": 4,
+    "k": 5,
+    "l": 3,
+    "m": 6,
+    "n": 6,
+    "o": 6,
+    "p": 6,
+    "q": 6,
+    "r": 6,
+    "s": 6,
+    "t": 6,
+    "u": 6,
+    "v": 6,
+    "w": 6,
+    "x": 6,
+    "y": 6,
+    "z": 6,
+    ":": 4,
+    ";": 4,
+    "<": 7,
+    "=": 8,
+    ">": 7,
+    "?": 6,
+    "{": 5,
+    "}": 5,
+    "^": 6,
+    "~": 8,
+    "…": 9,
+    " ": 4,
+    "　": 8,
+    "\\": 0,
+}
+// #endregion
+
+function getGithubParams(path) {
+    return path ? { ...githubDetails, path } : githubDetails;
+}
 
 async function mainSetup() {
     const octoModule = await import("https://esm.sh/octokit");
-    const octokit = new octoModule.Octokit();
-    let days = [];
-    octokit.rest.repos.getContent({
-        owner: 'CornStarch9272',
-        repo: 'SNSC3-Translation',
-        ref: 'IScript-Development',
-    }).then(response => {
-        for (let item of response.data) {
-            if (item.type === 'dir') {
-                days.push(item.name);
-            }
-        }
-        day_selector.innerHTML = '';
-        for (let day of days) {
-            if (day == 'script untranslated' || day == 'system_messages') continue;
+    const octokit = new octoModule.Octokit(auth);
+    const { data: forks } = await octokit.rest.repos.listForks(githubDetails);
+
+    ownerSelector.innerHTML = '';
+    const defaultOwnerOption = document.createElement('option');
+    defaultOwnerOption.value = defaultGithubDetails.owner;
+    defaultOwnerOption.text = defaultGithubDetails.owner;
+    ownerSelector.appendChild(defaultOwnerOption);
+
+    for (const fork of forks) {
+        if (fork.owner.login) {
+            const username = fork.owner.login;
             let option = document.createElement('option');
-            option.value = day;
-            option.innerHTML = day;
-            day_selector.appendChild(option);
+            option.value = username;
+            option.text = username;
+            ownerSelector.appendChild(option);
         }
-        DAYS_LOADED = true;
-        loadDay();
-    });
+    }
+
+    const { data: branches } = await octokit.rest.repos.listBranches(githubDetails);
+    
+    branchSelector.innerHTML = '';
+    const defaultBranchOption = document.createElement('option');
+    defaultBranchOption.value = defaultGithubDetails.ref;
+    defaultBranchOption.text = defaultGithubDetails.ref;
+    branchSelector.appendChild(defaultBranchOption);
+
+    for (const branch of branches) {
+        const branchName = branch.name;
+        if (branchName !== defaultGithubDetails.ref) {
+            let option = document.createElement('option');
+            option.value = branchName;
+            option.text = branchName;
+            branchSelector.appendChild(option);
+        }
+    }
+
+    ownerSelector.addEventListener('change', setOwner);
+    branchSelector.addEventListener('change', setBranch);
+
+    await retrieveDays();
+}
+
+async function setOwner() {
+    if (DIRTY) {
+        if (!confirm("Are you sure? You have unsaved changes that will be lost.")) {
+            return;
+        }
+    }
+
+    githubDetails.owner = this.value;
+    await retrieveBranches();
+}
+
+async function setBranch() {
+    if (DIRTY) {
+        if (!confirm("Are you sure? You have unsaved changes that will be lost.")) {
+            return;
+        }
+    }
+
+    githubDetails.ref = this.value;
+    await retrieveDays();
+}
+
+async function retrieveBranches() {
+    if (DIRTY) {
+        if (!confirm("Are you sure? You have unsaved changes that will be lost.")) {
+            return;
+        }
+    }
+
+    DAYS_LOADED = false;
+    branchSelector.removeEventListener('change', setBranch);
+    const octoModule = await import("https://esm.sh/octokit");
+    const octokit = new octoModule.Octokit(auth);
+
+    branchSelector.innerHTML = '';
+    const { data: branches } = await octokit.rest.repos.listBranches(githubDetails);
+
+    for (const branch of branches) {
+        const branchName = branch.name;
+        let option = document.createElement('option');
+        option.value = branchName;
+        option.text = branchName;
+        branchSelector.appendChild(option);
+    }
+    branchSelector.addEventListener('change', setBranch);
+
+    // Since we're changing the branch dropdown, 
+    // force reload with the default selected branch
+    githubDetails.ref = branches[0].name;
+    await retrieveDays();
+}
+
+async function retrieveDays() {
+    const octoModule = await import("https://esm.sh/octokit");
+    const octokit = new octoModule.Octokit(auth);
+
+    daySelector.removeEventListener('change', loadDay);
+    
+    DAYS_LOADED = false;
+    daySelector.innerHTML = '';
+    const { data: days } = await octokit.rest.repos.getContent(getGithubParams());
+    for (const day of days) {
+        const name = day.name;
+        if (day.type === 'dir' && !ignoredFolders.includes(name)) {
+            let option = document.createElement('option');
+            option.value = name;
+            option.text = name;
+            daySelector.appendChild(option);
+        }
+    }
+
+    DAYS_LOADED = true;
+
+    daySelector.addEventListener('change', loadDay);
+    await loadDay();
 }
 
 /**
  * Read IScript file and process its contents
  */
-function readFile()
-{
+function readFile() {
     // Get file input element and trigger click
     const openFileInput = document.getElementById('open-file-input');
     openFileInput.click();
     // Handle file being selected / changed
     openFileInput.onchange = e => {
         const file_ = e.target.files[0];
-        filename = file_.name;
+        const filename = file_.name;
         const reader = new FileReader();
         reader.onload = event => {
             const text = event.target.result;
@@ -112,30 +421,25 @@ function readFile()
     }
 }
 
-
 async function loadDay() {
     if (!DAYS_LOADED) return;
     CHAPTERS_LOADED = false;
     const octoModule = await import("https://esm.sh/octokit");
-    const octokit = new octoModule.Octokit();
+    const octokit = new octoModule.Octokit(auth);
     let chapters = [];
-    octokit.rest.repos.getContent({
-        owner: 'CornStarch9272',
-        repo: 'SNSC3-Translation',
-        ref: 'IScript-Development',
-        path: day_selector.value,
-    }).then(response => {
+
+    octokit.rest.repos.getContent(getGithubParams(daySelector.value)).then(response => {
         for (let item of response.data) {
             if (item.type === 'file') {
                 chapters.push(item.name);
             }
         }
-        chapter_selector.innerHTML = '';
+        chapterSelector.innerHTML = '';
         for (let chapter of chapters) {
             let option = document.createElement('option');
             option.value = chapter;
             option.innerHTML = chapter;
-            chapter_selector.appendChild(option);
+            chapterSelector.appendChild(option);
         }
         CHAPTERS_LOADED = true;
     });
@@ -150,14 +454,9 @@ async function loadChapter() {
         }
     }
     const octoModule = await import("https://esm.sh/octokit");
-    const octokit = new octoModule.Octokit();
-    await octokit.rest.repos.getContent({
-        owner: 'CornStarch9272',
-        repo: 'SNSC3-Translation',
-        ref: 'IScript-Development',
-        path: day_selector.value + '/' + chapter_selector.value,
-    }).then(async response => {
-        enFilename = chapter_selector.value;
+    const octokit = new octoModule.Octokit(auth);
+    await octokit.rest.repos.getContent(getGithubParams(daySelector.value + '/' + chapterSelector.value)).then(async response => {
+        enFilename = chapterSelector.value;
         const content = atob(response.data.content);
         engCodeFile = content;
         await readJPFile();
@@ -168,18 +467,12 @@ async function loadChapter() {
 }
 
 
-async function readJPFile()
-{
+async function readJPFile() {
     const octoModule = await import("https://esm.sh/octokit");
-    const octokit = new octoModule.Octokit();
+    const octokit = new octoModule.Octokit(auth);
     let splits = enFilename.split('_');
     let jpScriptPath = splits[splits.length - 1];
-    await octokit.rest.repos.getContent({
-        owner: 'CornStarch9272',
-        repo: 'SNSC3-Translation',
-        ref: 'IScript-Development',
-        path: 'script untranslated' + '/' + jpScriptPath,
-    }).then(response => {
+    await octokit.rest.repos.getContent(getGithubParams('script untranslated' + '/' + jpScriptPath)).then(response => {
         const decodedText = new TextDecoder().decode(
             Uint8Array.from(atob(response.data.content), c => c.charCodeAt(0))
             );
@@ -225,7 +518,7 @@ function saveFile() {
  */
 function extractText() {
     let text = '';
-    divCounter = 0;
+    let divCounter = 0;
     // All relevant elements have numerical IDs starting from 0
     while (true) {
         let div = document.getElementById(divCounter);
@@ -272,8 +565,7 @@ function extractText() {
             }
         }
         // All other elements just contain unedited code lines
-        else
-            text += div.textContent + '\n';
+        else text += div.textContent + '\n';
         divCounter += 1;
     }
     return text;
@@ -411,7 +703,7 @@ function processText() {
                 
                 let charCountArea = document.createElement('textarea');
                 charCountArea.disabled = true;
-                for (x in storedLines) {
+                for (const x in storedLines) {
                     let splits = storedLines[x].split('"');
                     codeLines.push(splits[0]);
                     if (splits.length > 1) {
@@ -584,18 +876,14 @@ function clearCode(line) {
  * @returns boolean
  */
 function textCode(line) {
-    if (line.startsWith('dialog')) 
-        return true;
-    else if (line.startsWith('place')) 
-        return true;
-    else if (line.startsWith('setname')) 
-        return true;
-    else if (line.startsWith('menut')) 
-        return true;
-    else if (line.startsWith('choicet')) 
-        return true;
-    else if (line.startsWith('popuptxt')) 
-        return true;
+    if (
+        line.startsWith('dialog') || 
+        line.startsWith('place') || 
+        line.startsWith('setname') || 
+        line.startsWith('menut') || 
+        line.startsWith('choicet') || 
+        line.startsWith('popuptxt')
+    ) return true;
     return false;
 }
 
@@ -970,198 +1258,11 @@ function showSpecialCharacters() {
     alert("Special Characters:\n\nPlayer Name = #PlayerName\nPlayer Nickname = #PlayerNickname\nPartner Name = #PartnerName\nItem Name: #ItemName\nEllipses = …\nIDSP = 　\nHeart symbol = #Heart\nPaw = #Paw\n● = #Dot");
 }
 
-
-
-
 // Warn user about unsaved changes when leaving page
 window.onbeforeunload = function() {
     if (DIRTY) {
         return "Data will be lost if you leave the page, are you sure?";
     }
-}
-
-
-// Mapping of character IDs to names
-const names = {
-    0:"Player",
-    2:"Partner",
-    106:"???",
-    107:"Murno",
-    108:"V.E",
-    109:"Tier",
-    110:"Lemmy",
-    111:"Jade",
-    112:"Velvoren",
-    113:"Thus",
-    114:"Roche",
-    115:"Unknown",
-    116:"Unknown",
-    117:"V.E Otome Mode",
-    118:"Gatekeeper",
-    119:"Chief",
-    120:"Man",
-    121:"Woman",
-    122:"Elderly",
-    123:"Child",
-    124:"Shop Owner",
-    125:"Shop Clerk",
-    126:"Merchant",
-    127:"Reception",
-    128:"Rob",
-    129:"Wellman",
-    130:"Ianna",
-    131:"Zakk",
-    132:"Jade",
-    133:"Benson",
-    134:"Anise",
-    135:"Tram",
-    136:"Gallahan",
-    137:"Serge",
-    138:"Eliez",
-    141:"Phantom Dragon",
-    142:"Magdrad",
-    143:"Archer Girl",
-    144:"Stray Cat",
-    145:"Catlover",
-    146:"Fisherman",
-    147:"Lumberjack",
-    148:"Peddler",
-    149:"Peddler's Daughter",
-    150:"Wantedman",
-    151:"Jailer",
-    152:"Zenichi",
-    153:"Zenji",
-    154:"Zenzou",
-    155:"Zentatsu"
-};
-
-const TAGS = {
-    "[NAME 0]" : "#PlayerName",
-    "[NAME 1]" : "#PlayerNickname",
-    "[NAME 2]" : "#PartnerName",
-    "[NAME 4]" : "#ItemName",
-    "..." : "…",
-    "   " : "　",
-    "◎" : "#Heart",
-    "∞" : "#Paw",
-    "●" : "#Dot"
-}
-
-const BAD_TAGS = {
-    "ã" : "　",
-    "â¦" : "…",
-    "â" : "#Heart",
-    "Î²" : "#PlayerName",
-    "Î´" : "#PlayerNickname",
-    "Î³" : "#PartnerName",
-}
-
-const TAG_LENGTH = {
-    "#PlayerName": 72,
-    "#PlayerNickname": 72,
-    "#PartnerName": 72,
-    "[NAME 0]": 72,
-    "[NAME 1]": 72,
-    "[NAME 2]": 72,
-    "[NAME 4]" : 72,
-    "◎" : 12,
-    "∞" : 12,
-    "●" : 8
-};
-
-
-const CHARACTER_SPACE = {
-    "!": 3,
-    "\"": 7,
-    "#": 8,
-    "$": 7,
-    "%": 8,
-    "&": 8,
-    "'": 3,
-    "(": 6,
-    ")": 6,
-    "*": 8,
-    "+": 8,
-    ",": 3,
-    "-": 6,
-    ".": 3,
-    "/": 8,
-    "0": 6,
-    "1": 5,
-    "2": 6,
-    "3": 6,
-    "4": 6,
-    "5": 6,
-    "6": 6,
-    "7": 6,
-    "8": 6,
-    "9": 6,
-    "A": 6,
-    "B": 6,
-    "C": 6,
-    "D": 6,
-    "E": 6,
-    "F": 6,
-    "G": 6,
-    "H": 6,
-    "I": 4,
-    "J": 6,
-    "K": 6,
-    "L": 6,
-    "M": 6,
-    "N": 6,
-    "O": 6,
-    "P": 6,
-    "Q": 7,
-    "R": 6,
-    "S": 6,
-    "T": 6,
-    "U": 6,
-    "V": 6,
-    "W": 6,
-    "X": 6,
-    "Y": 6,
-    "Z": 6,
-    "a": 6,
-    "b": 6,
-    "c": 6,
-    "d": 6,
-    "e": 6,
-    "f": 6,
-    "g": 6,
-    "h": 6,
-    "i": 3,
-    "j": 4,
-    "k": 5,
-    "l": 3,
-    "m": 6,
-    "n": 6,
-    "o": 6,
-    "p": 6,
-    "q": 6,
-    "r": 6,
-    "s": 6,
-    "t": 6,
-    "u": 6,
-    "v": 6,
-    "w": 6,
-    "x": 6,
-    "y": 6,
-    "z": 6,
-    ":": 4,
-    ";": 4,
-    "<": 7,
-    "=": 8,
-    ">": 7,
-    "?": 6,
-    "{": 5,
-    "}": 5,
-    "^": 6,
-    "~": 8,
-    "…": 9,
-    " ": 4,
-    "　": 8,
-    "\\": 0,
 }
 
 mainSetup();
